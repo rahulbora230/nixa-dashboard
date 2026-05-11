@@ -15,4 +15,27 @@ httpClient.interceptors.request.use((config) => {
   return config;
 });
 
+httpClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // Handle authentication errors globally
+    if (error.response?.status === 401) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      window.location.href = "/login";
+    }
+    
+    // Ensure consistent error format
+    if (error.response?.data) {
+      return Promise.reject(error.response.data);
+    }
+    
+    return Promise.reject({
+      success: false,
+      message: error.message || "Network error occurred",
+      error: "NETWORK_ERROR"
+    });
+  }
+);
+
 export default httpClient;

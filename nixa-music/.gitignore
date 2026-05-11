@@ -15,7 +15,6 @@ pnpm-debug.log*
 # Build outputs
 dist/
 build/
-dist-ssr/
 *.tsbuildinfo
 
 # Logs
@@ -144,9 +143,8 @@ ehthumbs.db
 Thumbs.db
 
 # IDE files
-.vscode/*
-!.vscode/extensions.json
-.idea
+.vscode/
+.idea/
 *.swp
 *.swo
 *~
@@ -155,6 +153,14 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 *.db
+
+# Backend specific
+backend-dev.log
+backend-dev.err.log
+backend-phase8.log
+backend-phase8.err.log
+backend-phase8.job.log
+backend-phase8.out.log
 
 # Frontend specific
 frontend-dev.log
@@ -165,11 +171,8 @@ frontend-dev.err.log
 *.spec.js
 coverage/
 
-# Vite specific
-.vite/
-
-# React specific
-.eslintcache
-
-# Local files
-*.local
+# Build artifacts
+dist/
+build/
+*.tgz
+*.tar.gz

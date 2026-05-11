@@ -451,19 +451,20 @@ const canEditRelease = async (user, release) => {
     return false;
   }
 
+  // Allow editing of drafts by owners and creators
   if (release.status === "draft") {
     return canReadRelease(user, release);
   }
 
-  if (release.status !== "updated") {
-    return false;
+  // Allow editing of "updated" status releases
+  if (release.status === "updated") {
+    if (getLegacyUserId(user) && Number(release.user_id) === getLegacyUserId(user)) {
+      return true;
+    }
+    return canReadRelease(user, release);
   }
 
-  if (getLegacyUserId(user) && Number(release.user_id) === getLegacyUserId(user)) {
-    return true;
-  }
-
-  return canReadRelease(user, release);
+  return false;
 };
 
 const canEditMetadata = async (user, release) => {
@@ -3753,6 +3754,1098 @@ router.post("/bulk/transfer", async (req, res) => {
   }
 });
 
+// POST /api/releases/bulk/metadata - Upload bulk metadata from Excel/CSV
+router.post("/bulk/metadata", metadataUpload.single("file"), async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await ensureReleaseSchema();
+
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded." });
+    }
+
+    const { format = "auto", saveAsDraft = true } = req.body;
+    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(worksheet);
+
+    if (!rows.length) {
+      return res.status(400).json({ message: "Uploaded file is empty." });
+    }
+
+    const detectedFormat = detectMetadataFormat(rows, format);
+    const validationContext = { seenIsrcs: new Set(), seenUpcs: new Set() };
+    const processedRows = [];
+    const errors = [];
+    const warnings = [];
+
+    // Process each row
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNum = i + 2; // Excel row numbers start from 2 (1 is header)
+      
+      try {
+        const mapped = mapMetadataRow(row, detectedFormat);
+        const validation = validateMetadataRow(mapped, detectedFormat, defaultMetadataFormats, validationContext);
+        
+        processedRows.push({
+          rowNumber: rowNum,
+          data: mapped.normalized,
+          validation: {
+            errors: validation.errors,
+            warnings: validation.warnings,
+            unknownHeaders: validation.unknownHeaders
+          }
+        });
+
+        if (validation.errors.length > 0) {
+          errors.push(`Row ${rowNum}: ${validation.errors.join(", ")}`);
+        }
+        if (validation.warnings.length > 0) {
+          warnings.push(`Row ${rowNum}: ${validation.warnings.join(", ")}`);
+        }
+      } catch (error) {
+        errors.push(`Row ${rowNum}: ${error.message}`);
+      }
+    }
+
+    if (errors.length > 0 && !saveAsDraft) {
+      return res.status(400).json({
+        message: "Validation failed. Fix errors or save as draft.",
+        errors,
+        warnings,
+        processedRows
+      });
+    }
+
+    await client.query("BEGIN");
+
+    // Group rows by release to create releases with multiple tracks
+    const releaseGroups = new Map();
+    processedRows.forEach(row => {
+      const releaseKey = `${row.data.release_title}_${row.data.primary_artist}_${row.data.label_name}`;
+      if (!releaseGroups.has(releaseKey)) {
+        releaseGroups.set(releaseKey, []);
+      }
+      releaseGroups.get(releaseKey).push(row);
+    });
+
+    const createdReleases = [];
+    let releaseCounter = 1;
+
+    for (const [releaseKey, tracks] of releaseGroups) {
+      const firstTrack = tracks[0].data;
+      const releasePayload = {
+        release_type: tracks.length > 1 ? "album" : "single",
+        title: firstTrack.release_title,
+        primary_artist: firstTrack.primary_artist,
+        label_name: firstTrack.label_name,
+        genre: firstTrack.genre,
+        language: firstTrack.language,
+        status: saveAsDraft ? "draft" : "submitted",
+        created_by: req.user.id,
+        current_owner: String(req.user.id),
+        metadata_format_version: detectedFormat
+      };
+
+      // Create release
+      const releaseResult = await client.query(
+        `
+        INSERT INTO releases (title, release_title, primary_artist, label_name, genre, language, 
+                           release_type, status, created_by, current_owner, metadata_format_version, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+        RETURNING id
+        `,
+        [
+          releasePayload.title,
+          releasePayload.title,
+          releasePayload.primary_artist,
+          releasePayload.label_name,
+          releasePayload.genre,
+          releasePayload.language,
+          releasePayload.release_type,
+          releasePayload.status,
+          releasePayload.created_by,
+          releasePayload.current_owner,
+          releasePayload.metadata_format_version
+        ]
+      );
+
+      const releaseId = releaseResult.rows[0].id;
+
+      // Create tracks
+      for (const trackData of tracks) {
+        const trackPayload = {
+          release_id: releaseId,
+          title: trackData.data.track_title,
+          song_name: trackData.data.track_title,
+          primary_artist: trackData.data.primary_artist,
+          featuring_artist: trackData.data.featuring_artist,
+          remixer: trackData.data.remixer,
+          isrc: trackData.data.isrc,
+          iswc: trackData.data.iswc,
+          genre: trackData.data.genre,
+          language: trackData.data.language,
+          composer: trackData.data.composer,
+          lyricist: trackData.data.lyricist,
+          producer: trackData.data.producer,
+          director: trackData.data.director,
+          star_cast: trackData.data.star_cast,
+          description: trackData.data.description,
+          explicit: trackData.data.explicit,
+          instrumental: trackData.data.instrumental,
+          preview_start_time: trackData.data.preview_start_time,
+          crbt_title: trackData.data.crbt_title,
+          crbt_start_time_1: trackData.data.crbt_start_time_1,
+          crbt_start_time_2: trackData.data.crbt_start_time_2,
+          dolby_atmos: trackData.data.dolby_atmos,
+          track_number: trackData.data.track_number || (tracks.indexOf(trackData) + 1)
+        };
+
+        await client.query(
+          `
+          INSERT INTO tracks (release_id, title, song_name, primary_artist, featuring_artist, remixer,
+                           isrc, iswc, genre, language, composer, lyricist, producer, director,
+                           star_cast, description, explicit, instrumental, preview_start_time,
+                           crbt_title, crbt_start_time_1, crbt_start_time_2, dolby_atmos, track_number, created_at, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
+                  $19, $20, $21, $22, $23, $24, NOW(), NOW())
+          `,
+          [
+            trackPayload.release_id, trackPayload.title, trackPayload.song_name, trackPayload.primary_artist,
+            trackPayload.featuring_artist, trackPayload.remixer, trackPayload.isrc, trackPayload.iswc,
+            trackPayload.genre, trackPayload.language, trackPayload.composer, trackPayload.lyricist,
+            trackPayload.producer, trackPayload.director, trackPayload.star_cast, trackPayload.description,
+            trackPayload.explicit, trackPayload.instrumental, trackPayload.preview_start_time,
+            trackPayload.crbt_title, trackPayload.crbt_start_time_1, trackPayload.crbt_start_time_2,
+            trackPayload.dolby_atmos, trackPayload.track_number
+          ]
+        );
+      }
+
+      // Log the bulk import
+      await client.query(
+        `
+        INSERT INTO audit_logs (user_id, action, entity_type, entity_id, metadata)
+        VALUES ($1, 'release.bulk_import', 'release', $2, $3)
+        `,
+        [
+          req.user.id,
+          releaseId,
+          JSON.stringify({
+            format: detectedFormat,
+            trackCount: tracks.length,
+            saveAsDraft,
+            source: "bulk_metadata_upload"
+          })
+        ]
+      );
+
+      createdReleases.push({
+        id: releaseId,
+        title: releasePayload.title,
+        trackCount: tracks.length,
+        status: releasePayload.status
+      });
+
+      releaseCounter++;
+    }
+
+    await client.query("COMMIT");
+
+    res.json({
+      message: `Successfully created ${createdReleases.length} releases with ${processedRows.length} tracks.`,
+      format: detectedFormat,
+      releases: createdReleases,
+      processedRows: processedRows.length,
+      errors: errors.length > 0 ? errors : undefined,
+      warnings: warnings.length > 0 ? warnings : undefined
+    });
+
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Bulk metadata upload error:", error);
+    res.status(500).json({ message: error.message || "Failed to process bulk metadata upload." });
+  } finally {
+    client.release();
+  }
+});
+
+// PUT /api/releases/:id/draft - Update draft release
+router.put("/:id/draft", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await ensureReleaseSchema();
+
+    const release = await getReleaseById(req.params.id);
+    if (!release) {
+      return res.status(404).json({ message: "Release not found." });
+    }
+
+    if (release.status !== "draft") {
+      return res.status(400).json({ message: "Only draft releases can be updated using this endpoint." });
+    }
+
+    if (!await canEditRelease(req.user, release)) {
+      return res.status(403).json({ message: "You don't have permission to edit this draft." });
+    }
+
+    const releasePayload = mapReleasePayload(req.body);
+    const tracksPayload = mapTrackPayloads(req.body);
+
+    await client.query("BEGIN");
+
+    // Update release
+    await client.query(
+      `
+      UPDATE releases
+      SET 
+        release_type = $1,
+        title = $2,
+        release_title = $3,
+        permalink_slug = $4,
+        primary_artist = $5,
+        featured_artists = $6,
+        label_name = $7,
+        sub_label_name = $8,
+        genre = $9,
+        sub_genre = $10,
+        language = $11,
+        original_release_date = $12,
+        release_date = $13,
+        go_live_date = $14,
+        upc = $15,
+        copyright_owner = $16,
+        copyright_holder = $17,
+        copyright_line = $18,
+        production_year = $19,
+        catalog_number = $20,
+        publisher = $21,
+        explicit = $22,
+        notes = $23,
+        internal_notes = $24,
+        territory_mode = $25,
+        included_territories = $26,
+        excluded_territories = $27,
+        store_selection = $28,
+        distribution_type = $29,
+        promotional_release = $30,
+        updated_at = NOW()
+      WHERE id = $31
+      `,
+      [
+        releasePayload.release_type,
+        releasePayload.title,
+        releasePayload.release_title,
+        releasePayload.permalink_slug,
+        releasePayload.primary_artist,
+        releasePayload.featured_artists,
+        releasePayload.label_name,
+        releasePayload.sub_label_name,
+        releasePayload.genre,
+        releasePayload.sub_genre,
+        releasePayload.language,
+        releasePayload.original_release_date,
+        releasePayload.release_date,
+        releasePayload.go_live_date,
+        releasePayload.upc,
+        releasePayload.copyright_owner,
+        releasePayload.copyright_holder,
+        releasePayload.copyright_line,
+        releasePayload.production_year,
+        releasePayload.catalog_number,
+        releasePayload.publisher,
+        releasePayload.explicit,
+        releasePayload.notes,
+        releasePayload.internal_notes,
+        releasePayload.territory_mode,
+        releasePayload.included_territories,
+        releasePayload.excluded_territories,
+        releasePayload.store_selection,
+        releasePayload.distribution_type,
+        releasePayload.promotional_release,
+        release.id
+      ]
+    );
+
+    // Update tracks
+    for (const track of tracksPayload) {
+      if (track.id) {
+        // Update existing track
+        await client.query(
+          `
+          UPDATE tracks
+          SET 
+            title = $1,
+            song_name = $2,
+            primary_artist = $3,
+            featuring_artist = $4,
+            remixer = $5,
+            isrc = $6,
+            iswc = $7,
+            composer = $8,
+            lyricist = $9,
+            producer = $10,
+            director = $11,
+            star_cast = $12,
+            description = $13,
+            duration = $14,
+            version = $15,
+            language = $16,
+            genre = $17,
+            subgenre = $18,
+            mood = $19,
+            explicit = $20,
+            instrumental = $21,
+            preview_start_time = $22,
+            tiktok_clip_start = $23,
+            crbt_title = $24,
+            crbt_start_time_1 = $25,
+            crbt_start_time_2 = $26,
+            dolby_atmos = $27,
+            lyrics_file = $28,
+            bitrate = $29,
+            sample_rate = $30,
+            stereo_mono = $31,
+            updated_at = NOW()
+          WHERE id = $32 AND release_id = $33
+          `,
+          [
+            track.title, track.song_name, track.primary_artist, track.featuring_artist,
+            track.remixer, track.isrc, track.iswc, track.composer, track.lyricist,
+            track.producer, track.director, track.star_cast, track.description, track.duration,
+            track.version, track.language, track.genre, track.subgenre, track.mood,
+            track.explicit, track.instrumental, track.preview_start_time, track.tiktok_clip_start,
+            track.crbt_title, track.crbt_start_time_1, track.crbt_start_time_2,
+            track.dolby_atmos, track.lyrics_file, track.bitrate, track.sample_rate,
+            track.stereo_mono, track.id, release.id
+          ]
+        );
+      } else {
+        // Create new track
+        await client.query(
+          `
+          INSERT INTO tracks (
+            release_id, title, song_name, primary_artist, featuring_artist, remixer,
+            isrc, iswc, composer, lyricist, producer, director, star_cast,
+            description, duration, version, language, genre, subgenre, mood,
+            explicit, instrumental, preview_start_time, tiktok_clip_start,
+            crbt_title, crbt_start_time_1, crbt_start_time_2, dolby_atmos,
+            lyrics_file, bitrate, sample_rate, stereo_mono, created_at, updated_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+                  $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
+                  $25, $26, $27, $28, $29, $30, $31, $32, $33, NOW(), NOW())
+          `,
+          [
+            release.id, track.title, track.song_name, track.primary_artist, track.featuring_artist,
+            track.remixer, track.isrc, track.iswc, track.composer, track.lyricist,
+            track.producer, track.director, track.star_cast, track.description, track.duration,
+            track.version, track.language, track.genre, track.subgenre, track.mood,
+            track.explicit, track.instrumental, track.preview_start_time, track.tiktok_clip_start,
+            track.crbt_title, track.crbt_start_time_1, track.crbt_start_time_2,
+            track.dolby_atmos, track.lyrics_file, track.bitrate, track.sample_rate,
+            track.stereo_mono
+          ]
+        );
+      }
+    }
+
+    // Log draft update
+    await client.query(
+      `
+      INSERT INTO audit_logs (user_id, action, entity_type, entity_id, metadata)
+      VALUES ($1, 'release.draft_update', 'release', $2, $3)
+      `,
+      [
+        req.user.id,
+        release.id,
+        JSON.stringify({
+          updatedFields: Object.keys(releasePayload),
+          trackCount: tracksPayload.length,
+          timestamp: new Date().toISOString()
+        })
+      ]
+    );
+
+    await client.query("COMMIT");
+
+    // Get updated release data
+    const updatedRelease = await getReleaseById(release.id);
+    const updatedTracks = await getTracksByReleaseId(release.id);
+
+    res.json({
+      message: "Draft updated successfully.",
+      release: formatReleaseResponse(updatedRelease, updatedTracks)
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Draft update error:", error);
+    res.status(500).json({ message: error.message || "Failed to update draft." });
+  } finally {
+    client.release();
+  }
+});
+
+// POST /api/releases/:id/submit - Submit draft for review
+router.post("/:id/submit", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await ensureReleaseSchema();
+
+    const release = await getReleaseById(req.params.id);
+    if (!release) {
+      return res.status(404).json({ message: "Release not found." });
+    }
+
+    if (release.status !== "draft") {
+      return res.status(400).json({ message: "Only draft releases can be submitted." });
+    }
+
+    if (!await canEditRelease(req.user, release)) {
+      return res.status(403).json({ message: "You don't have permission to submit this draft." });
+    }
+
+    const tracks = await getTracksByReleaseId(release.id);
+    if (!tracks.length) {
+      return res.status(400).json({ message: "Release must have at least one track before submission." });
+    }
+
+    await client.query("BEGIN");
+
+    // Update release status
+    await client.query(
+      "UPDATE releases SET status = 'submitted', updated_at = NOW() WHERE id = $1",
+      [release.id]
+    );
+
+    // Create status log
+    await client.query(
+      `
+      INSERT INTO release_status_logs (release_id, from_status, to_status, notes, changed_by)
+      VALUES ($1, $2, $3, $4, $5)
+      `,
+      [release.id, "draft", "submitted", "Draft submitted for review", req.user.id]
+    );
+
+    // Log submission
+    await client.query(
+      `
+      INSERT INTO audit_logs (user_id, action, entity_type, entity_id, metadata)
+      VALUES ($1, 'release.submit', 'release', $2, $3)
+      `,
+      [
+        req.user.id,
+        release.id,
+        JSON.stringify({
+          previousStatus: "draft",
+          newStatus: "submitted",
+          trackCount: tracks.length,
+          timestamp: new Date().toISOString()
+        })
+      ]
+    );
+
+    await client.query("COMMIT");
+
+    res.json({
+      message: "Release submitted successfully.",
+      release: {
+        id: release.id,
+        title: release.release_title || release.title,
+        status: "submitted",
+        trackCount: tracks.length
+      }
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Draft submission error:", error);
+    res.status(500).json({ message: error.message || "Failed to submit draft." });
+  } finally {
+    client.release();
+  }
+});
+
+// GET /api/releases/:id/platform-links - Get platform links for a release
+router.get("/:id/platform-links", async (req, res) => {
+  try {
+    await ensureReleaseSchema();
+
+    const release = await getReleaseById(req.params.id);
+    if (!release) {
+      return res.status(404).json({ message: "Release not found." });
+    }
+
+    if (!(await canReadRelease(req.user, release))) {
+      return res.status(403).json({ message: "You do not have access to this release." });
+    }
+
+    const links = await getReleasePlatformLinks(release.id);
+
+    res.json({
+      release_id: release.id,
+      platform_links: links
+    });
+  } catch (error) {
+    console.error("Get platform links error:", error);
+    res.status(500).json({ message: error.message || "Failed to fetch platform links." });
+  }
+});
+
+// POST /api/releases/:id/platform-links - Add platform links for a release
+router.post("/:id/platform-links", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await ensureReleaseSchema();
+
+    const release = await getReleaseById(req.params.id);
+    if (!release) {
+      return res.status(404).json({ message: "Release not found." });
+    }
+
+    if (!(await canEditRelease(req.user, release))) {
+      return res.status(403).json({ message: "You don't have permission to add platform links." });
+    }
+
+    const { platform_links = [] } = req.body;
+    const allowedPlatforms = [
+      "spotify", "apple_music", "youtube_music", "jiosaavn", 
+      "wynk", "amazon", "instagram", "facebook"
+    ];
+
+    if (!Array.isArray(platform_links) || platform_links.length === 0) {
+      return res.status(400).json({ message: "Platform links array is required." });
+    }
+
+    await client.query("BEGIN");
+
+    const addedLinks = [];
+
+    for (const link of platform_links) {
+      if (!allowedPlatforms.includes(link.platform?.toLowerCase())) {
+        return res.status(400).json({ message: `Invalid platform: ${link.platform}` });
+      }
+
+      if (!link.url) {
+        return res.status(400).json({ message: "URL is required for each platform link." });
+      }
+
+      // Check if link already exists
+      const existingLink = await client.query(
+        "SELECT id FROM track_platform_links WHERE release_id = $1 AND platform = $2",
+        [release.id, link.platform.toLowerCase()]
+      );
+
+      if (existingLink.rows.length === 0) {
+        const result = await client.query(
+          `
+          INSERT INTO track_platform_links (release_id, track_id, platform, url, link_type, is_active, created_by, created_at, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+          RETURNING *
+          `,
+          [
+            release.id,
+            link.track_id || null,
+            link.platform.toLowerCase(),
+            link.url,
+            link.link_type || "release",
+            link.is_active !== undefined ? link.is_active : true,
+            req.user.id
+          ]
+        );
+
+        addedLinks.push(result.rows[0]);
+      }
+    }
+
+    // Log platform links addition
+    await client.query(
+      `
+      INSERT INTO audit_logs (user_id, action, entity_type, entity_id, metadata)
+      VALUES ($1, 'release.platform_links_add', 'release', $2, $3)
+      `,
+      [
+        req.user.id,
+        release.id,
+        JSON.stringify({
+          addedCount: addedLinks.length,
+          platforms: addedLinks.map(link => link.platform),
+          timestamp: new Date().toISOString()
+        })
+      ]
+    );
+
+    await client.query("COMMIT");
+
+    res.json({
+      message: "Platform links added successfully.",
+      added_links: addedLinks
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Add platform links error:", error);
+    res.status(500).json({ message: error.message || "Failed to add platform links." });
+  } finally {
+    client.release();
+  }
+});
+
+// PUT /api/releases/:id/platform-links/:platform - Update platform link
+router.put("/:id/platform-links/:platform", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await ensureReleaseSchema();
+
+    const release = await getReleaseById(req.params.id);
+    if (!release) {
+      return res.status(404).json({ message: "Release not found." });
+    }
+
+    if (!(await canEditRelease(req.user, release))) {
+      return res.status(403).json({ message: "You don't have permission to update platform links." });
+    }
+
+    const { url, link_type, is_active } = req.body;
+    const platform = req.params.platform.toLowerCase();
+
+    const allowedPlatforms = [
+      "spotify", "apple_music", "youtube_music", "jiosaavn", 
+      "wynk", "amazon", "instagram", "facebook"
+    ];
+
+    if (!allowedPlatforms.includes(platform)) {
+      return res.status(400).json({ message: "Invalid platform." });
+    }
+
+    if (!url) {
+      return res.status(400).json({ message: "URL is required." });
+    }
+
+    await client.query("BEGIN");
+
+    const result = await client.query(
+      `
+      UPDATE track_platform_links
+      SET url = $1, link_type = COALESCE($2, link_type), is_active = COALESCE($3, is_active), updated_by = $4, updated_at = NOW()
+      WHERE release_id = $5 AND platform = $6
+      RETURNING *
+      `,
+      [url, link_type, is_active, req.user.id, release.id, platform]
+    );
+
+    if (result.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Platform link not found." });
+    }
+
+    // Log platform link update
+    await client.query(
+      `
+      INSERT INTO audit_logs (user_id, action, entity_type, entity_id, metadata)
+      VALUES ($1, 'release.platform_link_update', 'release', $2, $3)
+      `,
+      [
+        req.user.id,
+        release.id,
+        JSON.stringify({
+          platform,
+          url,
+          link_type,
+          is_active,
+          timestamp: new Date().toISOString()
+        })
+      ]
+    );
+
+    await client.query("COMMIT");
+
+    res.json({
+      message: "Platform link updated successfully.",
+      platform_link: result.rows[0]
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Update platform link error:", error);
+    res.status(500).json({ message: error.message || "Failed to update platform link." });
+  } finally {
+    client.release();
+  }
+});
+
+// DELETE /api/releases/:id/platform-links/:platform - Delete platform link
+router.delete("/:id/platform-links/:platform", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await ensureReleaseSchema();
+
+    const release = await getReleaseById(req.params.id);
+    if (!release) {
+      return res.status(404).json({ message: "Release not found." });
+    }
+
+    if (!(await canEditRelease(req.user, release))) {
+      return res.status(403).json({ message: "You don't have permission to delete platform links." });
+    }
+
+    const platform = req.params.platform.toLowerCase();
+
+    const allowedPlatforms = [
+      "spotify", "apple_music", "youtube_music", "jiosaavn", 
+      "wynk", "amazon", "instagram", "facebook"
+    ];
+
+    if (!allowedPlatforms.includes(platform)) {
+      return res.status(400).json({ message: "Invalid platform." });
+    }
+
+    await client.query("BEGIN");
+
+    const result = await client.query(
+      "DELETE FROM track_platform_links WHERE release_id = $1 AND platform = $2 RETURNING *",
+      [release.id, platform]
+    );
+
+    if (result.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Platform link not found." });
+    }
+
+    // Log platform link deletion
+    await client.query(
+      `
+      INSERT INTO audit_logs (user_id, action, entity_type, entity_id, metadata)
+      VALUES ($1, 'release.platform_link_delete', 'release', $2, $3)
+      `,
+      [
+        req.user.id,
+        release.id,
+        JSON.stringify({
+          platform,
+          deletedLink: result.rows[0],
+          timestamp: new Date().toISOString()
+        })
+      ]
+    );
+
+    await client.query("COMMIT");
+
+    res.json({
+      message: "Platform link deleted successfully.",
+      deleted_link: result.rows[0]
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Delete platform link error:", error);
+    res.status(500).json({ message: error.message || "Failed to delete platform link." });
+  } finally {
+    client.release();
+  }
+});
+
+// GET /api/releases/export/metadata - Export all user-submitted metadata fields as Excel
+router.get("/export/metadata", async (req, res) => {
+  try {
+    await ensureReleaseSchema();
+
+    const scope = await getReleaseScope(req.user);
+    const { format = "xlsx", includeTracks = true, status } = req.query;
+
+    let whereClause = scope.clause ? `WHERE ${scope.clause}` : "";
+    const values = [...scope.values];
+
+    if (status) {
+      values.push(status.toLowerCase());
+      whereClause += whereClause ? ` AND r.status = $${values.length}` : `WHERE r.status = $${values.length}`;
+    }
+
+    // Get releases with metadata
+    const releasesResult = await pool.query(
+      `
+      SELECT 
+        r.id,
+        r.release_title,
+        r.title,
+        r.primary_artist,
+        r.featured_artists,
+        r.label_name,
+        r.sub_label_name,
+        r.genre,
+        r.sub_genre,
+        r.language,
+        r.release_type,
+        r.original_release_date,
+        r.release_date,
+        r.go_live_date,
+        r.upc,
+        r.copyright_owner,
+        r.copyright_holder,
+        r.copyright_line,
+        r.production_year,
+        r.catalog_number,
+        r.publisher,
+        r.explicit,
+        r.notes,
+        r.internal_notes,
+        r.territory_mode,
+        r.included_territories,
+        r.excluded_territories,
+        r.store_selection,
+        r.distribution_type,
+        r.promotional_release,
+        r.status,
+        r.metadata_completion_percentage,
+        r.created_at::text as created_at,
+        r.updated_at::text as updated_at,
+        u.email as created_by_email,
+        u.name as created_by_name
+      FROM releases r
+      LEFT JOIN users u ON u.id = r.created_by
+      ${whereClause}
+      ORDER BY r.created_at DESC
+      `,
+      values
+    );
+
+    let exportData = [];
+
+    if (includeTracks === 'true') {
+      // Get detailed data with tracks
+      for (const release of releasesResult.rows) {
+        const tracksResult = await pool.query(
+          `
+          SELECT 
+            t.id,
+            t.title,
+            t.song_name,
+            t.primary_artist,
+            t.featuring_artist,
+            t.remixer,
+            t.isrc,
+            t.iswc,
+            t.genre,
+            t.subgenre,
+            t.language,
+            t.mood,
+            t.description,
+            t.explicit,
+            t.instrumental,
+            t.composer,
+            t.lyricist,
+            t.producer,
+            t.director,
+            t.star_cast,
+            t.duration,
+            t.version,
+            t.preview_start_time,
+            t.tiktok_clip_start,
+            t.crbt_title,
+            t.crbt_start_time_1,
+            t.crbt_start_time_2,
+            t.dolby_atmos,
+            t.track_number,
+            t.bitrate,
+            t.sample_rate,
+            t.stereo_mono
+          FROM tracks t
+          WHERE t.release_id = $1
+          ORDER BY t.track_number ASC
+          `,
+          [release.id]
+        );
+
+        // Create a row for each track
+        tracksResult.rows.forEach((track, index) => {
+          exportData.push({
+            // Release fields (repeated for each track)
+            release_id: release.id,
+            release_title: release.release_title || release.title,
+            primary_artist: release.primary_artist,
+            featured_artists: release.featured_artists,
+            label_name: release.label_name,
+            sub_label_name: release.sub_label_name,
+            release_genre: release.genre,
+            release_subgenre: release.sub_genre,
+            release_language: release.language,
+            release_type: release.release_type,
+            original_release_date: release.original_release_date,
+            release_date: release.release_date,
+            go_live_date: release.go_live_date,
+            upc: release.upc,
+            copyright_owner: release.copyright_owner,
+            copyright_holder: release.copyright_holder,
+            copyright_line: release.copyright_line,
+            production_year: release.production_year,
+            catalog_number: release.catalog_number,
+            publisher: release.publisher,
+            release_explicit: release.explicit,
+            notes: release.notes,
+            internal_notes: release.internal_notes,
+            territory_mode: release.territory_mode,
+            included_territories: Array.isArray(release.included_territories) ? release.included_territories.join(', ') : release.included_territories,
+            excluded_territories: Array.isArray(release.excluded_territories) ? release.excluded_territories.join(', ') : release.excluded_territories,
+            store_selection: Array.isArray(release.store_selection) ? release.store_selection.join(', ') : release.store_selection,
+            distribution_type: release.distribution_type,
+            promotional_release: release.promotional_release,
+            status: release.status,
+            metadata_completion_percentage: release.metadata_completion_percentage,
+            created_at: release.created_at,
+            updated_at: release.updated_at,
+            created_by_email: release.created_by_email,
+            created_by_name: release.created_by_name,
+            
+            // Track fields
+            track_id: track.id,
+            track_number: track.track_number || index + 1,
+            track_title: track.title || track.song_name,
+            track_song_name: track.song_name,
+            track_primary_artist: track.primary_artist,
+            track_featuring_artist: track.featuring_artist,
+            track_remixer: track.remixer,
+            isrc: track.isrc,
+            iswc: track.iswc,
+            track_genre: track.genre,
+            track_subgenre: track.subgenre,
+            track_language: track.language,
+            track_mood: track.mood,
+            track_description: track.description,
+            track_explicit: track.explicit,
+            track_instrumental: track.instrumental,
+            composer: track.composer,
+            lyricist: track.lyricist,
+            producer: track.producer,
+            director: track.director,
+            star_cast: track.star_cast,
+            duration: track.duration,
+            version: track.version,
+            preview_start_time: track.preview_start_time,
+            tiktok_clip_start: track.tiktok_clip_start,
+            crbt_title: track.crbt_title,
+            crbt_start_time_1: track.crbt_start_time_1,
+            crbt_start_time_2: track.crbt_start_time_2,
+            dolby_atmos: track.dolby_atmos,
+            bitrate: track.bitrate,
+            sample_rate: track.sample_rate,
+            stereo_mono: track.stereo_mono
+          });
+        });
+      }
+    } else {
+      // Release-only export
+      exportData = releasesResult.rows.map(release => ({
+        release_id: release.id,
+        release_title: release.release_title || release.title,
+        primary_artist: release.primary_artist,
+        featured_artists: release.featured_artists,
+        label_name: release.label_name,
+        sub_label_name: release.sub_label_name,
+        genre: release.genre,
+        sub_genre: release.sub_genre,
+        language: release.language,
+        release_type: release.release_type,
+        original_release_date: release.original_release_date,
+        release_date: release.release_date,
+        go_live_date: release.go_live_date,
+        upc: release.upc,
+        copyright_owner: release.copyright_owner,
+        copyright_holder: release.copyright_holder,
+        copyright_line: release.copyright_line,
+        production_year: release.production_year,
+        catalog_number: release.catalog_number,
+        publisher: release.publisher,
+        explicit: release.explicit,
+        notes: release.notes,
+        internal_notes: release.internal_notes,
+        territory_mode: release.territory_mode,
+        included_territories: Array.isArray(release.included_territories) ? release.included_territories.join(', ') : release.included_territories,
+        excluded_territories: Array.isArray(release.excluded_territories) ? release.excluded_territories.join(', ') : release.excluded_territories,
+        store_selection: Array.isArray(release.store_selection) ? release.store_selection.join(', ') : release.store_selection,
+        distribution_type: release.distribution_type,
+        promotional_release: release.promotional_release,
+        status: release.status,
+        metadata_completion_percentage: release.metadata_completion_percentage,
+        created_at: release.created_at,
+        updated_at: release.updated_at,
+        created_by_email: release.created_by_email,
+        created_by_name: release.created_by_name
+      }));
+    }
+
+    // Create Excel file
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    
+    // Auto-size columns
+    const colWidths = Object.keys(exportData[0] || {}).map(() => ({ wch: 20 }));
+    worksheet['!cols'] = colWidths;
+    
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Metadata Export");
+
+    const buffer = XLSX.write(workbook, { type: "buffer", bookType: format });
+    
+    const filename = `metadata-export-${new Date().toISOString().split('T')[0]}.${format}`;
+    const contentType = format === 'csv' 
+      ? 'text/csv' 
+      : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(buffer);
+
+  } catch (error) {
+    console.error("Export metadata error:", error);
+    res.status(500).json({ message: error.message || "Failed to export metadata." });
+  }
+});
+
+// GET /api/releases/templates/v1 - Download V1 metadata template
+router.get("/templates/v1", async (req, res) => {
+  try {
+    await ensureReleaseSchema();
+
+    const templateRows = buildTemplateRows("v1", defaultMetadataFormats);
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(templateRows);
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Metadata V1 Template");
+
+    const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+    
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", "attachment; filename=metadata-v1-template.xlsx");
+    res.send(buffer);
+  } catch (error) {
+    console.error("Template V1 download error:", error);
+    res.status(500).json({ message: error.message || "Failed to generate V1 template." });
+  }
+});
+
+// GET /api/releases/templates/v2 - Download V2 metadata template
+router.get("/templates/v2", async (req, res) => {
+  try {
+    await ensureReleaseSchema();
+
+    const templateRows = buildTemplateRows("v2", defaultMetadataFormats);
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(templateRows);
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Metadata V2 Template");
+
+    const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+    
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", "attachment; filename=metadata-v2-template.xlsx");
+    res.send(buffer);
+  } catch (error) {
+    console.error("Template V2 download error:", error);
+    res.status(500).json({ message: error.message || "Failed to generate V2 template." });
+  }
+});
+
 router.get("/qc/dashboard", async (req, res) => {
   try {
     await ensureReleaseSchema();
@@ -5657,6 +6750,149 @@ router.delete("/:id", async (req, res) => {
     await client.query("ROLLBACK");
     console.error("Delete release error:", error);
     res.status(500).json({ message: error.message || "Failed to delete release." });
+  } finally {
+    client.release();
+  }
+});
+
+// GET /api/releases/bulk/status - Get bulk status of releases
+router.get("/bulk/status", async (req, res) => {
+  try {
+    await ensureReleaseSchema();
+
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ message: "Only admin can view bulk release status." });
+    }
+
+    const releaseIds = Array.isArray(req.query.releaseIds) 
+      ? req.query.releaseIds.map(String).filter(Boolean) 
+      : [];
+
+    if (!releaseIds.length) {
+      return res.status(400).json({ message: "Release IDs are required." });
+    }
+
+    const result = await pool.query(
+      `
+      SELECT 
+        r.id,
+        r.title,
+        r.release_title,
+        r.primary_artist,
+        r.status,
+        r.qc_status,
+        r.metadata_completion_percentage,
+        r.created_at,
+        r.updated_at,
+        COUNT(t.id) as track_count
+      FROM releases r
+      LEFT JOIN tracks t ON t.release_id = r.id
+      WHERE r.id::text = ANY($1::text[])
+      GROUP BY r.id, r.title, r.release_title, r.primary_artist, r.status, r.qc_status, r.metadata_completion_percentage, r.created_at, r.updated_at
+      ORDER BY r.updated_at DESC
+      `,
+      [releaseIds]
+    );
+
+    res.json({
+      releases: result.rows,
+      total: result.rows.length
+    });
+  } catch (error) {
+    console.error("Bulk status fetch error:", error);
+    res.status(500).json({ message: error.message || "Failed to fetch bulk status." });
+  }
+});
+
+// PATCH /api/releases/:id/platform-status - Update platform-specific status
+router.patch("/:id/platform-status", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await ensureReleaseSchema();
+
+    const releaseId = req.params.id;
+    const { platform, status, notes } = req.body;
+
+    if (!platform || !status) {
+      return res.status(400).json({ message: "Platform and status are required." });
+    }
+
+    const allowedPlatforms = [
+      "spotify", "apple_music", "youtube_music", "jiosaavn", 
+      "wynk", "amazon", "instagram", "facebook"
+    ];
+
+    if (!allowedPlatforms.includes(platform.toLowerCase())) {
+      return res.status(400).json({ message: "Invalid platform." });
+    }
+
+    const allowedPlatformStatuses = [
+      "pending", "processing", "live", "rejected", "failed", "removed"
+    ];
+
+    if (!allowedPlatformStatuses.includes(status.toLowerCase())) {
+      return res.status(400).json({ message: "Invalid platform status." });
+    }
+
+    const release = await getReleaseById(releaseId);
+    if (!release) {
+      return res.status(404).json({ message: "Release not found." });
+    }
+
+    if (!await canEditRelease(req.user, release)) {
+      return res.status(403).json({ message: "You don't have permission to update this release." });
+    }
+
+    await client.query("BEGIN");
+
+    // Check if platform status record exists
+    const existingStatus = await client.query(
+      "SELECT * FROM release_platform_status WHERE release_id = $1 AND platform = $2",
+      [release.id, platform.toLowerCase()]
+    );
+
+    if (existingStatus.rows.length > 0) {
+      // Update existing record
+      await client.query(
+        `
+        UPDATE release_platform_status
+        SET status = $1, notes = $2, updated_by = $3, updated_at = NOW()
+        WHERE release_id = $4 AND platform = $5
+        `,
+        [status.toLowerCase(), normalizeText(notes), req.user.id, release.id, platform.toLowerCase()]
+      );
+    } else {
+      // Create new record
+      await client.query(
+        `
+        INSERT INTO release_platform_status (release_id, platform, status, notes, created_by)
+        VALUES ($1, $2, $3, $4, $5)
+        `,
+        [release.id, platform.toLowerCase(), status.toLowerCase(), normalizeText(notes), req.user.id]
+      );
+    }
+
+    // Log the change
+    await client.query(
+      `
+      INSERT INTO audit_logs (user_id, action, entity_type, entity_id, metadata)
+      VALUES ($1, 'release.platform_status', 'release', $2, $3)
+      `,
+      [req.user.id, release.id, JSON.stringify({ platform, status, notes })]
+    );
+
+    await client.query("COMMIT");
+
+    res.json({ 
+      message: "Platform status updated successfully.",
+      platform: platform.toLowerCase(),
+      status: status.toLowerCase()
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Platform status update error:", error);
+    res.status(500).json({ message: error.message || "Failed to update platform status." });
   } finally {
     client.release();
   }

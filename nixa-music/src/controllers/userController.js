@@ -5,7 +5,7 @@ const { ensureManagementSchema } = require("../services/management/managementSch
 const { logActivity } = require("../services/management/managementService");
 const { createPasswordReset, resetPassword } = require("../services/auth/passwordResetService");
 
-const JWT_SECRET = process.env.JWT_SECRET || "nixa_secret_key";
+const JWT_SECRET = process.env.JWT_SECRET || 'nixa_music_jwt_secret_key_2024_development';
 
 exports.createUser = async (req, res) => {
   try {
