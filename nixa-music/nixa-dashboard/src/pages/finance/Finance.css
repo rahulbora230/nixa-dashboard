@@ -1,0 +1,222 @@
+.finance-workspace {
+  gap: 20px;
+}
+
+.finance-toolbar,
+.split-form,
+.statement-toolbar {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.finance-toolbar input,
+.finance-toolbar select,
+.split-form input,
+.split-form select,
+.split-form textarea,
+.statement-toolbar input,
+.statement-toolbar select,
+.finance-search input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  outline: 0;
+  color: var(--text-primary);
+  background: rgba(2, 6, 13, 0.72);
+  padding: 0 12px;
+}
+
+.split-form textarea {
+  min-height: 86px;
+  padding: 12px;
+  resize: vertical;
+}
+
+.finance-search {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  background: rgba(2, 6, 13, 0.72);
+}
+
+.finance-search input {
+  min-height: 36px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.span-2 {
+  grid-column: span 2;
+}
+
+.span-3 {
+  grid-column: span 3;
+}
+
+.span-6 {
+  grid-column: 1 / -1;
+}
+
+.finance-section-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr);
+  gap: 20px;
+}
+
+.finance-chart {
+  width: 100%;
+  min-height: 300px;
+}
+
+.finance-badge {
+  display: inline-flex;
+  min-width: 72px;
+  justify-content: center;
+  padding: 6px 9px;
+  border: 1px solid rgba(16, 215, 255, 0.24);
+  border-radius: var(--radius-sm);
+  color: var(--accent-cyan);
+  background: rgba(16, 215, 255, 0.09);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.finance-badge.inactive,
+.finance-badge.unpaid {
+  color: var(--accent-amber);
+  border-color: rgba(251, 191, 36, 0.25);
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.finance-badge.paid,
+.finance-badge.active {
+  color: var(--accent-green);
+  border-color: rgba(94, 234, 212, 0.25);
+  background: rgba(94, 234, 212, 0.08);
+}
+
+.finance-badge.partial {
+  color: var(--accent-magenta);
+  border-color: rgba(244, 63, 154, 0.25);
+  background: rgba(244, 63, 154, 0.08);
+}
+
+.finance-table .data-table {
+  min-width: 940px;
+}
+
+.split-percent {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.split-percent span {
+  display: inline-flex;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.finance-empty {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+  padding: 24px;
+  border: 1px dashed rgba(16, 215, 255, 0.22);
+  border-radius: var(--radius-lg);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.mini-list {
+  display: grid;
+  gap: 10px;
+}
+
+.mini-list-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.mini-list-row strong,
+.mini-list-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mini-list-row span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.finance-actions-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.finance-actions-inline button {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.055);
+  font-weight: 700;
+}
+
+@media (max-width: 1180px) {
+  .finance-toolbar,
+  .split-form,
+  .statement-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .finance-section-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .span-2,
+  .span-3 {
+    grid-column: span 1;
+  }
+}
+
+@media (max-width: 720px) {
+  .finance-toolbar,
+  .split-form,
+  .statement-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .span-2,
+  .span-3,
+  .span-6 {
+    grid-column: 1;
+  }
+}

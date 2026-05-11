@@ -1,0 +1,295 @@
+.management-workspace {
+  gap: 20px;
+}
+
+.management-toolbar,
+.management-form,
+.profile-form {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.management-toolbar input,
+.management-toolbar select,
+.management-form input,
+.management-form select,
+.management-form textarea,
+.profile-form input,
+.profile-form select,
+.profile-form textarea,
+.management-search input,
+.assignment-form input,
+.assignment-form select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  outline: 0;
+  color: var(--text-primary);
+  background: rgba(2, 6, 13, 0.72);
+  padding: 0 12px;
+}
+
+.management-form textarea,
+.profile-form textarea {
+  min-height: 86px;
+  padding: 12px;
+  resize: vertical;
+}
+
+.management-search {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  background: rgba(2, 6, 13, 0.72);
+}
+
+.management-search input {
+  min-height: 36px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.management-table .data-table {
+  min-width: 980px;
+}
+
+.management-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.85fr);
+  gap: 20px;
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.management-badge {
+  display: inline-flex;
+  min-width: 78px;
+  justify-content: center;
+  padding: 6px 9px;
+  border: 1px solid rgba(16, 215, 255, 0.24);
+  border-radius: var(--radius-sm);
+  color: var(--accent-cyan);
+  background: rgba(16, 215, 255, 0.09);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.management-badge.admin,
+.management-badge.label {
+  color: var(--accent-purple);
+  border-color: rgba(168, 85, 247, 0.28);
+  background: rgba(168, 85, 247, 0.1);
+}
+
+.management-badge.accountant {
+  color: var(--accent-magenta);
+  border-color: rgba(244, 63, 154, 0.28);
+  background: rgba(244, 63, 154, 0.1);
+}
+
+.management-badge.artist {
+  color: var(--accent-green);
+  border-color: rgba(94, 234, 212, 0.25);
+  background: rgba(94, 234, 212, 0.08);
+}
+
+.management-badge.active {
+  color: var(--accent-green);
+  border-color: rgba(94, 234, 212, 0.25);
+  background: rgba(94, 234, 212, 0.08);
+}
+
+.management-badge.disabled,
+.management-badge.inactive,
+.management-badge.removed {
+  color: var(--text-muted);
+  border-color: rgba(148, 163, 184, 0.24);
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.management-badge.pending {
+  color: var(--accent-amber);
+  border-color: rgba(251, 191, 36, 0.25);
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.management-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.management-actions a,
+.management-actions button,
+.assignment-form button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.055);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.management-empty {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+  padding: 24px;
+  border: 1px dashed rgba(16, 215, 255, 0.22);
+  border-radius: var(--radius-lg);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.detail-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.detail-list dt {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.detail-list dd {
+  margin: 4px 0 0;
+  color: var(--text-primary);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.assignment-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.activity-feed {
+  display: grid;
+  gap: 10px;
+}
+
+.activity-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.activity-row strong,
+.activity-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-row span,
+.activity-row small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.span-2 {
+  grid-column: span 2;
+}
+
+.span-3 {
+  grid-column: span 3;
+}
+
+.span-6 {
+  grid-column: 1 / -1;
+}
+
+.management-subsection {
+  display: grid;
+  gap: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.management-subsection h3 {
+  margin: 0;
+}
+
+.management-subsection p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.metadata-format-admin {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.5fr) minmax(200px, 0.7fr) repeat(2, minmax(240px, 1fr));
+  gap: 12px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+@media (max-width: 1180px) {
+  .management-toolbar,
+  .management-form,
+  .profile-form,
+  .metadata-format-admin {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .management-grid,
+  .profile-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .span-2,
+  .span-3 {
+    grid-column: span 1;
+  }
+}
+
+@media (max-width: 720px) {
+  .management-toolbar,
+  .management-form,
+  .profile-form,
+  .detail-list,
+  .metadata-format-admin {
+    grid-template-columns: 1fr;
+  }
+
+  .span-2,
+  .span-3,
+  .span-6 {
+    grid-column: 1;
+  }
+}

@@ -1,0 +1,245 @@
+.admin-users-layout {
+  display: flex;
+  min-height: 100vh;
+  background: #07120f;
+  color: #fff;
+}
+
+.admin-users-main {
+  flex: 1;
+  padding: 24px;
+  margin-left: 260px;
+}
+
+.admin-users-header {
+  margin-top: 20px;
+  background: linear-gradient(135deg, #10251f, #07120f);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 28px;
+  padding: 28px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.eyebrow {
+  color: #1ed760;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 1.4px;
+  margin-bottom: 8px;
+}
+
+.admin-users-header h1 {
+  font-size: 34px;
+  margin: 0;
+}
+
+.admin-users-header p {
+  color: #9ca3af;
+  margin-top: 8px;
+}
+
+.header-stat {
+  background: rgba(30, 215, 96, 0.12);
+  border: 1px solid rgba(30, 215, 96, 0.25);
+  padding: 18px 26px;
+  border-radius: 22px;
+  text-align: center;
+}
+
+.header-stat span {
+  display: block;
+  color: #9ca3af;
+  font-size: 13px;
+}
+
+.header-stat strong {
+  font-size: 34px;
+  color: #1ed760;
+}
+
+.admin-users-grid {
+  display: grid;
+  grid-template-columns: 420px 1fr;
+  gap: 24px;
+  margin-top: 24px;
+}
+
+.user-card {
+  background: #0d1814;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 26px;
+  padding: 24px;
+}
+
+.card-title h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.card-title p {
+  color: #9ca3af;
+  margin-top: 6px;
+  font-size: 14px;
+}
+
+.user-form {
+  margin-top: 24px;
+}
+
+.input-group {
+  margin-bottom: 18px;
+}
+
+.input-group label {
+  display: block;
+  font-size: 13px;
+  color: #cbd5e1;
+  margin-bottom: 8px;
+}
+
+.input-group input,
+.input-group select {
+  width: 100%;
+  background: #07120f;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  padding: 14px 15px;
+  border-radius: 14px;
+  outline: none;
+  font-size: 14px;
+}
+
+.input-group input:focus,
+.input-group select:focus {
+  border-color: #1ed760;
+}
+
+.create-btn {
+  width: 100%;
+  padding: 15px;
+  border: none;
+  border-radius: 16px;
+  background: #1ed760;
+  color: #00140b;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 8px;
+}
+
+.create-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.form-message {
+  margin-top: 18px;
+  background: rgba(30, 215, 96, 0.1);
+  border: 1px solid rgba(30, 215, 96, 0.25);
+  color: #86efac;
+  padding: 12px 14px;
+  border-radius: 14px;
+  font-size: 14px;
+}
+
+.users-table-wrap {
+  overflow-x: auto;
+  margin-top: 22px;
+}
+
+.users-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.users-table th {
+  text-align: left;
+  color: #9ca3af;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.users-table td {
+  padding: 16px 14px;
+  color: #e5e7eb;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 14px;
+}
+
+.user-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: #1ed760;
+  color: #00140b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+}
+
+.role-pill,
+.status-pill {
+  padding: 7px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
+.role-pill.admin {
+  background: rgba(239, 68, 68, 0.14);
+  color: #fca5a5;
+}
+
+.role-pill.artist {
+  background: rgba(30, 215, 96, 0.14);
+  color: #86efac;
+}
+
+.role-pill.label {
+  background: rgba(59, 130, 246, 0.14);
+  color: #93c5fd;
+}
+
+.role-pill.accountant {
+  background: rgba(245, 158, 11, 0.14);
+  color: #fcd34d;
+}
+
+.status-pill.active {
+  background: rgba(30, 215, 96, 0.14);
+  color: #86efac;
+}
+
+.status-pill.inactive {
+  background: rgba(239, 68, 68, 0.14);
+  color: #fca5a5;
+}
+
+.empty-state {
+  margin-top: 24px;
+  padding: 30px;
+  text-align: center;
+  color: #9ca3af;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+}
+
+@media (max-width: 1100px) {
+  .admin-users-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-users-main {
+    margin-left: 0;
+  }
+}

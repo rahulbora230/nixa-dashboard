@@ -1,0 +1,238 @@
+.ops-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.ops-card,
+.ops-panel,
+.ops-table-panel,
+.qc-category-card {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.025)),
+    var(--surface-card);
+  box-shadow: var(--shadow-soft);
+}
+
+.ops-card {
+  display: grid;
+  gap: 8px;
+  min-height: 118px;
+  padding: 18px;
+}
+
+.ops-card span,
+.qc-category-card span,
+.ops-panel span,
+.ops-table-panel span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ops-card strong {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.ops-card small {
+  color: var(--text-secondary);
+}
+
+.ops-panel,
+.ops-table-panel {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+}
+
+.ops-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ops-panel-header h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.ops-panel-header p {
+  margin: 5px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.qc-score-ring {
+  display: grid;
+  width: 88px;
+  height: 88px;
+  place-items: center;
+  border: 1px solid rgba(16, 215, 255, 0.24);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(16, 215, 255, 0.18), transparent 62%),
+    conic-gradient(from 180deg, var(--accent-cyan), var(--accent-purple), var(--accent-magenta), var(--accent-cyan));
+  box-shadow: 0 0 26px rgba(16, 215, 255, 0.18);
+}
+
+.qc-score-ring strong {
+  display: grid;
+  width: 68px;
+  height: 68px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(2, 6, 13, 0.9);
+  font-size: 22px;
+}
+
+.qc-category-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.qc-category-card {
+  display: grid;
+  gap: 10px;
+  min-height: 148px;
+  padding: 16px;
+}
+
+.qc-category-card strong {
+  font-size: 24px;
+}
+
+.qc-category-card ul,
+.ops-message-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qc-category-card li,
+.ops-message-list li {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.ops-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.55fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.status-dot {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  padding: 0 10px;
+  border: 1px solid rgba(16, 215, 255, 0.2);
+  border-radius: var(--radius-sm);
+  color: var(--accent-cyan);
+  background: rgba(16, 215, 255, 0.08);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+.status-dot.failed,
+.status-dot.error,
+.status-dot.rejected,
+.status-dot.retry_failed {
+  border-color: rgba(248, 113, 113, 0.28);
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.2);
+}
+
+.status-dot.warning,
+.status-dot.pending,
+.status-dot.retry_pending,
+.status-dot.queued,
+.status-dot.requested {
+  border-color: rgba(251, 191, 36, 0.28);
+  color: #fde68a;
+  background: rgba(120, 53, 15, 0.2);
+}
+
+.status-dot.passed,
+.status-dot.live,
+.status-dot.completed,
+.status-dot.delivered,
+.status-dot.retry_success {
+  border-color: rgba(94, 234, 212, 0.28);
+  color: #99f6e4;
+  background: rgba(20, 83, 75, 0.18);
+}
+
+.status-dot.processing,
+.status-dot.delivering,
+.status-dot.retrying {
+  border-color: rgba(96, 165, 250, 0.28);
+  color: #bfdbfe;
+  background: rgba(30, 64, 175, 0.18);
+}
+
+.ops-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ops-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.ops-filter-row input,
+.ops-filter-row select,
+.ops-panel textarea {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  background: rgba(0, 20, 31, 0.72);
+  outline: 0;
+}
+
+.ops-filter-row input,
+.ops-filter-row select {
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+.ops-panel textarea {
+  width: 100%;
+  min-height: 90px;
+  padding: 12px;
+  resize: vertical;
+}
+
+@media (max-width: 1180px) {
+  .ops-grid,
+  .qc-category-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ops-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .ops-grid,
+  .qc-category-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-panel-header {
+    display: grid;
+  }
+}

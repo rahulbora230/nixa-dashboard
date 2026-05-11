@@ -1,0 +1,39 @@
+.sidebar {
+  width: 220px;
+  height: 100vh;
+  background: #11161d;
+
+  display: flex;
+  flex-direction: column;
+
+  overflow: hidden;
+}
+
+.sidebar-menu {
+  flex: 1;
+
+  overflow-y: auto;
+  overflow-x: hidden;
+
+  padding: 20px 15px;
+}
+
+/* Smooth Scroll */
+.sidebar-menu::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-menu::-webkit-scrollbar-thumb {
+  background: #2a3441;
+  border-radius: 20px;
+}
+
+.sidebar-menu::-webkit-scrollbar-thumb:hover {
+  background: #00ffaa55;
+}
+
+.sidebar-logout {
+  padding: 18px;
+  border-top: 1px solid #1d2630;
+  background: #11161d;
+}
